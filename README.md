@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Campus Connect
 
 Campus Connect is a React + Vite student campus platform backed by Firebase Authentication and Cloud Firestore.
@@ -82,3 +83,6 @@ firebase deploy --only hosting
 The project keeps demo data as a safe fallback so the UI remains usable when a Firebase collection has not been populated yet. Once Firebase data exists, the Firestore data is used.
 
 Do not commit `.env.local`.
+=======
+# Campus-Connect
+>>>>>>> 599644313b74d3fc9703f5c23a0a918a50756b47
