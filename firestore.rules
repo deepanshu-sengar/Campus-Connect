@@ -1,0 +1,111 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function approvedUser() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isOwner(uid) {
+      return approvedUser() && request.auth.uid == uid;
+    }
+
+    function roleOf(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.role;
+    }
+
+    function isAdmin() {
+      return approvedUser() && roleOf(request.auth.uid) == 'admin';
+    }
+
+    function isFacultyOrAdmin() {
+      return approvedUser() && roleOf(request.auth.uid) in ['faculty', 'admin'];
+    }
+
+    function validLostFoundImage() {
+      return !request.resource.data.keys().hasAny(['imageURL', 'imagePublicId', 'imageSize'])
+        || (
+          request.resource.data.imageURL is string
+          && request.resource.data.imagePublicId is string
+          && request.resource.data.imageSize is int
+          && request.resource.data.imageSize < 1048576
+        );
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isAdmin()
+        || (isOwner(uid) && request.resource.data.role == 'student');
+      allow update: if isAdmin()
+        || (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'email', 'photoURL', 'updatedAt']));
+      allow delete: if false;
+    }
+
+    match /messages/{messageId} {
+      allow read: if approvedUser();
+      allow create: if approvedUser()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1000;
+      allow update, delete: if approvedUser() && resource.data.userId == request.auth.uid;
+    }
+
+    match /lostFound/{itemId} {
+      allow read: if true;
+      allow create: if approvedUser()
+        && request.resource.data.userId == request.auth.uid
+        && validLostFoundImage();
+      allow update, delete: if approvedUser()
+        && resource.data.userId == request.auth.uid
+        && validLostFoundImage();
+    }
+
+    match /communityMembers/{memberId} {
+      allow read: if approvedUser();
+      allow create: if approvedUser() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if approvedUser() && resource.data.userId == request.auth.uid;
+    }
+
+    match /eventRegistrations/{registrationId} {
+      allow read: if approvedUser();
+      allow create: if approvedUser() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if approvedUser() && resource.data.userId == request.auth.uid;
+    }
+
+    match /communities/{communityId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /activities/{activityId} {
+      allow read: if true;
+      allow create: if approvedUser()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.category in ['Lost & Found', 'Academics']
+        && (
+          request.resource.data.category == 'Lost & Found'
+          || isFacultyOrAdmin()
+        );
+      allow update, delete: if isAdmin();
+    }
+
+    match /academicResources/{resourceId} {
+      allow read: if true;
+      allow create: if isFacultyOrAdmin()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin()
+        || (isFacultyOrAdmin() && resource.data.userId == request.auth.uid);
+    }
+  }
+}
